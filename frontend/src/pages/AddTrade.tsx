@@ -1,252 +1,304 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
-
-interface TradeForm {
-  ticker: string
-  entry: string
-  exit: string
-  direction: 'long' | 'short'
-  setup: string
-  notes: string
-  tags: string
-  date: string
-}
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { PageWrapper } from "@/components/layout/PageWrapper";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useTrades } from "@/hooks/useTrades";
+import { TradeCreate, Trade } from "@/api/trades";
+import { createTrade } from "@/api/trades";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AddTrade() {
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [showSuccess, setShowSuccess] = useState(false)
-  const [formData, setFormData] = useState<TradeForm>({
-    ticker: '',
-    entry: '',
-    exit: '',
-    direction: 'long',
-    setup: '',
-    notes: '',
-    tags: '',
-    date: new Date().toISOString().split('T')[0],
-  })
+  const navigate = useNavigate();
+  const { fetchTrades } = useTrades();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [showAIFeedback, setShowAIFeedback] = useState(false);
+  const [createdTrade, setCreatedTrade] = useState<Trade | null>(null);
+  const [formData, setFormData] = useState<TradeCreate>({
+    ticker: "",
+    entry: 0,
+    exit: null,
+    direction: "long",
+    setup: "",
+    notes: null,
+    tags: null,
+    date: new Date().toISOString().split("T")[0],
+  });
+  const [tagsInput, setTagsInput] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setShowSuccess(false)
+    e.preventDefault();
+    setLoading(true);
 
     try {
-      const tagsArray = formData.tags
-        .split(',')
-        .map(tag => tag.trim())
-        .filter(tag => tag.length > 0)
+      const tags = tagsInput
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
 
-      const payload = {
+      const tradeData: TradeCreate = {
         ...formData,
-        entry: parseFloat(formData.entry),
-        exit: parseFloat(formData.exit),
-        tags: tagsArray,
+        tags: tags.length > 0 ? tags : null,
+      };
+
+      const newTrade = await createTrade(tradeData);
+      setCreatedTrade(newTrade);
+      
+      // Refresh trades list
+      await fetchTrades();
+      
+      toast({
+        variant: "success",
+        title: "Success",
+        description: "Trade created successfully!",
+      });
+
+      // Show AI feedback if available
+      if (newTrade.ai_feedback) {
+        setShowAIFeedback(true);
       }
-
-      await api('/trades', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-
-      setShowSuccess(true)
       
       // Reset form
       setFormData({
-        ticker: '',
-        entry: '',
-        exit: '',
-        direction: 'long',
-        setup: '',
-        notes: '',
-        tags: '',
-        date: new Date().toISOString().split('T')[0],
-      })
-
-      setTimeout(() => {
-        setShowSuccess(false)
-        navigate('/history')
-      }, 2000)
+        ticker: "",
+        entry: 0,
+        exit: null,
+        direction: "long",
+        setup: "",
+        notes: null,
+        tags: null,
+        date: new Date().toISOString().split("T")[0],
+      });
+      setTagsInput("");
     } catch (error) {
-      console.error('Error adding trade:', error)
-      alert('Failed to add trade. Please try again.')
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create trade",
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
-  }
+  };
 
   return (
-    <div className="px-4 py-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Add New Trade</h1>
+    <PageWrapper>
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-neon-cyan to-neon-purple bg-clip-text text-transparent">
+            Add New Trade
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Record a new trade and get instant AI feedback
+          </p>
+        </div>
 
-        {showSuccess && (
-          <div className="mb-4 p-4 bg-green-900 border border-green-700 rounded-lg text-green-200">
-            Trade added successfully! Redirecting to history...
-          </div>
-        )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Trade Details</CardTitle>
+            <CardDescription>Fill in the information about your trade</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label htmlFor="ticker" className="text-sm font-medium">
+                    Ticker *
+                  </label>
+                  <Input
+                    id="ticker"
+                    value={formData.ticker}
+                    onChange={(e) =>
+                      setFormData({ ...formData, ticker: e.target.value.toUpperCase() })
+                    }
+                    placeholder="AAPL"
+                    required
+                  />
+                </div>
 
-        <form onSubmit={handleSubmit} className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="ticker" className="block text-sm font-medium mb-2">
-                Ticker *
-              </label>
-              <input
-                type="text"
-                id="ticker"
-                name="ticker"
-                value={formData.ticker}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                placeholder="AAPL"
-              />
-            </div>
+                <div className="space-y-2">
+                  <label htmlFor="date" className="text-sm font-medium">
+                    Date *
+                  </label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) =>
+                      setFormData({ ...formData, date: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
 
-            <div>
-              <label htmlFor="date" className="block text-sm font-medium mb-2">
-                Date *
-              </label>
-              <input
-                type="date"
-                id="date"
-                name="date"
-                value={formData.date}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label htmlFor="entry" className="text-sm font-medium">
+                    Entry Price *
+                  </label>
+                  <Input
+                    id="entry"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.entry || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        entry: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    placeholder="150.00"
+                    required
+                  />
+                </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="entry" className="block text-sm font-medium mb-2">
-                Entry Price *
-              </label>
-              <input
-                type="number"
-                id="entry"
-                name="entry"
-                value={formData.entry}
-                onChange={handleChange}
-                required
-                step="0.01"
-                min="0"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                placeholder="150.00"
-              />
-            </div>
+                <div className="space-y-2">
+                  <label htmlFor="exit" className="text-sm font-medium">
+                    Exit Price
+                  </label>
+                  <Input
+                    id="exit"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.exit || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        exit: e.target.value ? parseFloat(e.target.value) : null,
+                      })
+                    }
+                    placeholder="155.00"
+                  />
+                </div>
 
-            <div>
-              <label htmlFor="exit" className="block text-sm font-medium mb-2">
-                Exit Price *
-              </label>
-              <input
-                type="number"
-                id="exit"
-                name="exit"
-                value={formData.exit}
-                onChange={handleChange}
-                required
-                step="0.01"
-                min="0"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                placeholder="155.00"
-              />
-            </div>
+                <div className="space-y-2">
+                  <label htmlFor="direction" className="text-sm font-medium">
+                    Direction *
+                  </label>
+                  <Select
+                    value={formData.direction}
+                    onValueChange={(value: "long" | "short") =>
+                      setFormData({ ...formData, direction: value })
+                    }
+                  >
+                    <SelectTrigger id="direction">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="long">Long</SelectItem>
+                      <SelectItem value="short">Short</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-            <div>
-              <label htmlFor="direction" className="block text-sm font-medium mb-2">
-                Direction *
-              </label>
-              <select
-                id="direction"
-                name="direction"
-                value={formData.direction}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="long">Long</option>
-                <option value="short">Short</option>
-              </select>
-            </div>
-          </div>
+              <div className="space-y-2">
+                <label htmlFor="setup" className="text-sm font-medium">
+                  Setup *
+                </label>
+                <Input
+                  id="setup"
+                  value={formData.setup || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, setup: e.target.value })
+                  }
+                  placeholder="Breakout, Pullback, Reversal, etc."
+                  required
+                />
+              </div>
 
-          <div>
-            <label htmlFor="setup" className="block text-sm font-medium mb-2">
-              Setup *
-            </label>
-            <input
-              type="text"
-              id="setup"
-              name="setup"
-              value={formData.setup}
-              onChange={handleChange}
-              required
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              placeholder="Breakout, Pullback, Reversal, etc."
-            />
-          </div>
+              <div className="space-y-2">
+                <label htmlFor="tags" className="text-sm font-medium">
+                  Tags (comma-separated)
+                </label>
+                <Input
+                  id="tags"
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                  placeholder="momentum, tech, earnings"
+                />
+              </div>
 
-          <div>
-            <label htmlFor="tags" className="block text-sm font-medium mb-2">
-              Tags (comma-separated)
-            </label>
-            <input
-              type="text"
-              id="tags"
-              name="tags"
-              value={formData.tags}
-              onChange={handleChange}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              placeholder="momentum, tech, earnings"
-            />
-          </div>
+              <div className="space-y-2">
+                <label htmlFor="notes" className="text-sm font-medium">
+                  Notes
+                </label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      notes: e.target.value || null,
+                    })
+                  }
+                  placeholder="Additional notes about this trade..."
+                  rows={4}
+                />
+              </div>
 
-          <div>
-            <label htmlFor="notes" className="block text-sm font-medium mb-2">
-              Notes
-            </label>
-            <textarea
-              id="notes"
-              name="notes"
-              value={formData.notes}
-              onChange={handleChange}
-              rows={4}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              placeholder="Additional notes about this trade..."
-            />
-          </div>
+              <div className="flex gap-4 pt-4">
+                <Button type="submit" disabled={loading} variant="neon" className="flex-1">
+                  {loading ? "Adding Trade..." : "Add Trade"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate("/history")}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
-          <div className="flex gap-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
-            >
-              {loading ? 'Adding Trade...' : 'Add Trade'}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/history')}
-              className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        {/* AI Feedback Modal */}
+        <Dialog open={showAIFeedback} onOpenChange={setShowAIFeedback}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>AI Feedback</DialogTitle>
+              <DialogDescription>
+                Your trade has been analyzed by AI
+              </DialogDescription>
+            </DialogHeader>
+            {createdTrade?.ai_feedback && (
+              <div className="mt-4 space-y-4">
+                <div className="bg-gradient-to-r from-neon-purple/20 to-neon-cyan/20 border border-neon-purple/50 p-4 rounded-lg">
+                  <p className="text-sm whitespace-pre-wrap">
+                    {createdTrade.ai_feedback}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAIFeedback(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="neon"
+                    onClick={() => {
+                      setShowAIFeedback(false);
+                      navigate("/history");
+                    }}
+                  >
+                    View in History
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
-    </div>
-  )
+    </PageWrapper>
+  );
 }
-

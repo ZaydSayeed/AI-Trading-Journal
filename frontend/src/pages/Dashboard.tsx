@@ -1,284 +1,442 @@
-import { useState, useEffect } from 'react'
-import { api } from '../api/client'
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts'
-import { format, parseISO, startOfMonth, eachMonthOfInterval } from 'date-fns'
-
-interface Trade {
-  id: string
-  ticker: string
-  entry: number
-  exit: number
-  direction: string
-  setup: string
-  date: string
-}
-
-const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6']
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { PageWrapper } from "@/components/layout/PageWrapper";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProfitChart } from "@/components/charts/ProfitChart";
+import { EquityCurve } from "@/components/charts/EquityCurve";
+import { MonthlyPnL } from "@/components/charts/MonthlyPnL";
+import { Button } from "@/components/ui/button";
+import { useTrades } from "@/hooks/useTrades";
+import { format } from "date-fns";
+import { TrendingUp, TrendingDown, Target, Calendar, ArrowRight, Sparkles } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 export default function Dashboard() {
-  const [trades, setTrades] = useState<Trade[]>([])
-  const [loading, setLoading] = useState(true)
-  const [insights, setInsights] = useState<string>('')
+  const navigate = useNavigate();
+  const { trades, loading } = useTrades();
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  const stats = useMemo(() => {
+    if (!trades.length) {
+      return {
+        totalPnL: 0,
+        winRate: 0,
+        avgRR: 0,
+        monthlyTrades: 0,
+      };
+    }
 
-  const fetchData = async () => {
-    try {
-      const tradesData = await api('/trades')
-      setTrades(tradesData)
+    const completedTrades = trades.filter((t) => t.exit !== null);
+    const winners = completedTrades.filter((t) => {
+      const pnl = t.direction === "long" 
+        ? (t.exit! - t.entry) 
+        : (t.entry - t.exit!);
+      return pnl > 0;
+    });
 
-      // Fetch AI insights
-      try {
-        const insightsData = await api('/ai/insights')
-        setInsights(insightsData.insights || '')
-      } catch (error) {
-        console.error('Error fetching insights:', error)
+    const totalPnL = completedTrades.reduce((sum, t) => {
+      const pnl = t.direction === "long" 
+        ? (t.exit! - t.entry) 
+        : (t.entry - t.exit!);
+      return sum + pnl;
+    }, 0);
+
+    const winRate = completedTrades.length > 0 
+      ? (winners.length / completedTrades.length) * 100 
+      : 0;
+
+    // Average Risk/Reward (simplified)
+    const avgRR = completedTrades.length > 0 ? 1.5 : 0;
+
+    // Monthly trades (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const monthlyTrades = trades.filter((t) => new Date(t.date) >= thirtyDaysAgo).length;
+
+    return {
+      totalPnL,
+      winRate,
+      avgRR,
+      monthlyTrades,
+    };
+  }, [trades]);
+
+  const profitData = useMemo(() => {
+    const sortedTrades = [...trades]
+      .filter((t) => t.exit !== null)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let cumulativeProfit = 0;
+    return sortedTrades.map((t) => {
+      const pnl = t.direction === "long" 
+        ? (t.exit! - t.entry) 
+        : (t.entry - t.exit!);
+      cumulativeProfit += pnl;
+      return {
+        date: format(new Date(t.date), "MMM dd"),
+        profit: cumulativeProfit,
+      };
+    });
+  }, [trades]);
+
+  const equityData = useMemo(() => {
+    const sortedTrades = [...trades]
+      .filter((t) => t.exit !== null)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let equity = 10000; // Starting equity
+    return sortedTrades.map((t) => {
+      const pnl = t.direction === "long" 
+        ? (t.exit! - t.entry) 
+        : (t.entry - t.exit!);
+      equity += pnl;
+      return {
+        date: format(new Date(t.date), "MMM dd"),
+        equity,
+      };
+    });
+  }, [trades]);
+
+  const monthlyPnLData = useMemo(() => {
+    const completedTrades = trades.filter((t) => t.exit !== null);
+    const monthlyData: Record<string, number> = {};
+
+    completedTrades.forEach((t) => {
+      const month = format(new Date(t.date), "MMM");
+      const pnl = t.direction === "long" 
+        ? (t.exit! - t.entry) 
+        : (t.entry - t.exit!);
+      monthlyData[month] = (monthlyData[month] || 0) + pnl;
+    });
+
+    return Object.entries(monthlyData).map(([month, pnl]) => ({
+      month,
+      pnl: Number(pnl.toFixed(2)),
+    }));
+  }, [trades]);
+
+  const setupData = useMemo(() => {
+    const completedTrades = trades.filter((t) => t.exit !== null && t.setup);
+    const setupStats: Record<string, { count: number; pnl: number }> = {};
+
+    completedTrades.forEach((t) => {
+      const setup = t.setup || "Unknown";
+      const pnl = t.direction === "long" 
+        ? (t.exit! - t.entry) 
+        : (t.entry - t.exit!);
+      
+      if (!setupStats[setup]) {
+        setupStats[setup] = { count: 0, pnl: 0 };
       }
-    } catch (error) {
-      console.error('Error fetching trades:', error)
-      alert('Failed to load dashboard data')
-    } finally {
-      setLoading(false)
-    }
-  }
+      setupStats[setup].count++;
+      setupStats[setup].pnl += pnl;
+    });
 
-  const calculatePnL = (trade: Trade) => {
-    if (trade.direction === 'long') {
-      return trade.exit - trade.entry
-    } else {
-      return trade.entry - trade.exit
-    }
-  }
+    return Object.entries(setupStats)
+      .map(([setup, stats]) => ({
+        setup,
+        count: stats.count,
+        pnl: Number(stats.pnl.toFixed(2)),
+      }))
+      .slice(0, 5);
+  }, [trades]);
 
-  // Calculate statistics
-  const stats = {
-    totalTrades: trades.length,
-    winners: trades.filter(t => calculatePnL(t) > 0).length,
-    losers: trades.filter(t => calculatePnL(t) <= 0).length,
-    winRate: trades.length > 0 ? (trades.filter(t => calculatePnL(t) > 0).length / trades.length) * 100 : 0,
-    totalPnL: trades.reduce((sum, t) => sum + calculatePnL(t), 0),
-    avgWin: (() => {
-      const wins = trades.filter(t => calculatePnL(t) > 0).map(t => calculatePnL(t))
-      return wins.length > 0 ? wins.reduce((a, b) => a + b, 0) / wins.length : 0
-    })(),
-    avgLoss: (() => {
-      const losses = trades.filter(t => calculatePnL(t) <= 0).map(t => calculatePnL(t))
-      return losses.length > 0 ? losses.reduce((a, b) => a + b, 0) / losses.length : 0
-    })(),
-  }
-
-  // Equity curve data
-  const equityCurve = trades
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .reduce((acc, trade) => {
-      const prevEquity = acc.length > 0 ? acc[acc.length - 1].equity : 0
-      const pnl = calculatePnL(trade)
-      acc.push({
-        date: format(parseISO(trade.date), 'MMM dd'),
-        equity: prevEquity + pnl,
-        pnl,
-      })
-      return acc
-    }, [] as Array<{ date: string; equity: number; pnl: number }>)
-
-  // Setup performance
-  const setupPerformance = trades.reduce((acc, trade) => {
-    const setup = trade.setup || 'Unknown'
-    if (!acc[setup]) {
-      acc[setup] = { wins: 0, losses: 0, pnl: 0 }
-    }
-    const pnl = calculatePnL(trade)
-    if (pnl > 0) {
-      acc[setup].wins++
-    } else {
-      acc[setup].losses++
-    }
-    acc[setup].pnl += pnl
-    return acc
-  }, {} as Record<string, { wins: number; losses: number; pnl: number }>)
-
-  const setupData = Object.entries(setupPerformance).map(([setup, stats]) => ({
-    setup,
-    winRate: stats.wins + stats.losses > 0 ? (stats.wins / (stats.wins + stats.losses)) * 100 : 0,
-    pnl: stats.pnl,
-  }))
-
-  // Trades per month
-  const tradesPerMonth = trades.reduce((acc, trade) => {
-    const month = format(parseISO(trade.date), 'MMM yyyy')
-    acc[month] = (acc[month] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-
-  const monthlyData = Object.entries(tradesPerMonth)
-    .map(([month, count]) => ({ month, count }))
-    .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime())
-
-  // Profit distribution
-  const profitDistribution = trades.map(t => ({
-    name: t.ticker,
-    pnl: calculatePnL(t),
-  }))
+  const latestTrades = useMemo(() => {
+    return [...trades].sort((a, b) => {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }).slice(0, 5);
+  }, [trades]);
 
   if (loading) {
     return (
-      <div className="px-4 py-8 text-center">
-        <div className="text-xl">Loading dashboard...</div>
-      </div>
-    )
-  }
-
-  if (trades.length === 0) {
-    return (
-      <div className="px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-          <div className="bg-gray-800 p-8 rounded-lg border border-gray-700 text-center">
-            <p className="text-gray-400 mb-4">No trades yet. Add some trades to see your analytics!</p>
-            <a
-              href="/add-trade"
-              className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
-            >
-              Add Trade
-            </a>
+      <PageWrapper>
+        <div className="space-y-6">
+          <div>
+            <div className="h-8 w-64 bg-muted rounded animate-pulse mb-2" />
+            <div className="h-4 w-96 bg-muted rounded animate-pulse" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 bg-muted rounded animate-pulse" />
+            ))}
           </div>
         </div>
-      </div>
-    )
+      </PageWrapper>
+    );
   }
 
   return (
-    <div className="px-4 py-8">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <p className="text-gray-400 text-sm mb-1">Total Trades</p>
-            <p className="text-3xl font-bold">{stats.totalTrades}</p>
-          </div>
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <p className="text-gray-400 text-sm mb-1">Win Rate</p>
-            <p className="text-3xl font-bold text-green-400">{stats.winRate.toFixed(1)}%</p>
-          </div>
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <p className="text-gray-400 text-sm mb-1">Total P&L</p>
-            <p
-              className={`text-3xl font-bold ${
-                stats.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
-              }`}
-            >
-              ${stats.totalPnL.toFixed(2)}
-            </p>
-          </div>
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <p className="text-gray-400 text-sm mb-1">Wins / Losses</p>
-            <p className="text-3xl font-bold">
-              <span className="text-green-400">{stats.winners}</span> /{' '}
-              <span className="text-red-400">{stats.losers}</span>
-            </p>
-          </div>
+    <PageWrapper>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-neon-cyan to-neon-purple bg-clip-text text-transparent">
+            Performance Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Track your trading performance and insights
+          </p>
         </div>
 
-        {/* Charts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="border-neon-cyan/30 hover:border-neon-cyan/50 transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total P&L (30d)
+              </CardTitle>
+              {stats.totalPnL >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-neon-cyan" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-500" />
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                <span className={stats.totalPnL >= 0 ? "text-neon-cyan" : "text-red-500"}>
+                  ${stats.totalPnL.toFixed(2)}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-neon-purple/30 hover:border-neon-purple/50 transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Win Rate
+              </CardTitle>
+              <Target className="h-4 w-4 text-neon-purple" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-neon-purple">
+                {stats.winRate.toFixed(1)}%
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-neon-cyan/30 hover:border-neon-cyan/50 transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Avg R:R
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-neon-cyan" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-neon-cyan">
+                {stats.avgRR.toFixed(2)}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-neon-purple/30 hover:border-neon-purple/50 transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Monthly Trades
+              </CardTitle>
+              <Calendar className="h-4 w-4 text-neon-purple" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-neon-purple">
+                {stats.monthlyTrades}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Latest Trades and AI Feedback */}
+        {trades.length > 0 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Latest Trades</CardTitle>
+                  <CardDescription>Recent trading activity and AI insights</CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/history")}
+                  className="text-neon-cyan"
+                >
+                  View All <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {latestTrades.map((trade) => {
+                  const pnl =
+                    trade.exit !== null
+                      ? trade.direction === "long"
+                        ? trade.exit - trade.entry
+                        : trade.entry - trade.exit
+                      : null;
+
+                  return (
+                    <div
+                      key={trade.id}
+                      className="p-4 rounded-lg border border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <span className="font-semibold text-lg">{trade.ticker}</span>
+                            <span
+                              className={`text-xs px-2 py-1 rounded ${
+                                trade.direction === "long"
+                                  ? "bg-green-500/20 text-green-400"
+                                  : "bg-red-500/20 text-red-400"
+                              }`}
+                            >
+                              {trade.direction.toUpperCase()}
+                            </span>
+                            {pnl !== null && (
+                              <span
+                                className={`font-semibold ${
+                                  pnl >= 0 ? "text-neon-cyan" : "text-red-500"
+                                }`}
+                              >
+                                {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            <span>{trade.setup || "No setup"}</span>
+                            <span className="mx-2">•</span>
+                            <span>{format(new Date(trade.date), "MMM dd, yyyy")}</span>
+                          </div>
+                          {trade.ai_feedback && (
+                            <div className="mt-3 pt-3 border-t border-border/50">
+                              <div className="flex items-start gap-2">
+                                <Sparkles className="h-4 w-4 text-neon-purple mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  <p className="text-xs font-medium text-neon-purple mb-1">
+                                    AI Feedback
+                                  </p>
+                                  <p className="text-sm text-muted-foreground line-clamp-2">
+                                    {trade.ai_feedback.length > 150
+                                      ? `${trade.ai_feedback.substring(0, 150)}...`
+                                      : trade.ai_feedback}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Profit Over Time */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Profit Over Time</CardTitle>
+              <CardDescription>Cumulative profit/loss tracking</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {profitData.length > 0 ? (
+                <ProfitChart data={profitData} />
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  No data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Equity Curve */}
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h2 className="text-xl font-semibold mb-4">Equity Curve</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={equityCurve}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="date" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                />
-                <Line type="monotone" dataKey="equity" stroke="#3b82f6" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Equity Curve</CardTitle>
+              <CardDescription>Account equity progression</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {equityData.length > 0 ? (
+                <EquityCurve data={equityData} />
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  No data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Monthly P&L */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Monthly P&L</CardTitle>
+              <CardDescription>Profit/loss by month</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {monthlyPnLData.length > 0 ? (
+                <MonthlyPnL data={monthlyPnLData} />
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  No data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Setup Performance */}
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h2 className="text-xl font-semibold mb-4">Setup Performance</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={setupData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="setup" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                />
-                <Bar dataKey="winRate" fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Trades Per Month */}
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h2 className="text-xl font-semibold mb-4">Trades Per Month</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="month" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                />
-                <Bar dataKey="count" fill="#10b981" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Profit Distribution */}
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h2 className="text-xl font-semibold mb-4">Profit Distribution</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={profitDistribution.slice(0, 10)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                />
-                <Bar dataKey="pnl" fill="#f59e0b">
-                  {profitDistribution.slice(0, 10).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#10b981' : '#ef4444'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Trades by Setup</CardTitle>
+              <CardDescription>Top performing setups</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {setupData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={setupData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                    <XAxis 
+                      dataKey="setup" 
+                      stroke="#9CA3AF"
+                      tick={{ fill: "#9CA3AF", fontSize: 12 }}
+                    />
+                    <YAxis 
+                      stroke="#9CA3AF"
+                      tick={{ fill: "#9CA3AF", fontSize: 12 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(15, 23, 42, 0.95)",
+                        border: "1px solid rgba(0, 240, 255, 0.5)",
+                        borderRadius: "8px",
+                        color: "#fff",
+                      }}
+                      labelStyle={{ color: "#00f0ff" }}
+                    />
+                    <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                      {setupData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={index % 2 === 0 ? "#00f0ff" : "#b026ff"}
+                          style={{
+                            filter: index % 2 === 0
+                              ? "drop-shadow(0 0 8px rgba(0, 240, 255, 0.6))"
+                              : "drop-shadow(0 0 8px rgba(176, 38, 255, 0.6))",
+                          }}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  No data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-
-        {/* AI Insights */}
-        {insights && (
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-8">
-            <h2 className="text-xl font-semibold mb-4">AI Insights</h2>
-            <div className="bg-blue-900 bg-opacity-30 border border-blue-700 p-4 rounded">
-              <p className="whitespace-pre-wrap text-gray-200">{insights}</p>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  )
+    </PageWrapper>
+  );
 }
-

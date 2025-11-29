@@ -11,7 +11,7 @@ class AIService:
             raise ValueError("GROQ_API_KEY must be set in environment variables")
         
         self.client = Groq(api_key=api_key)
-        self.model = "llama-3.1-70b-versatile"  # Using 70B model for better analysis
+        self.model = "llama-3.1-8b-instant"
 
     def analyze_trade(self, trade: Dict) -> str:
         """Analyze a single trade and provide detailed feedback"""

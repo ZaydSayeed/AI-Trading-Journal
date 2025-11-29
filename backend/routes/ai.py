@@ -1,14 +1,9 @@
 from fastapi import APIRouter, HTTPException
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+from typing import Dict
 
 from services.supabase_service import SupabaseService
 from services.ai_service import AIService
 from models.trade_model import TradeResponse
-from typing import Dict
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -56,4 +51,3 @@ async def get_insights():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating insights: {str(e)}")
-

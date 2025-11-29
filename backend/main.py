@@ -2,8 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv, find_dotenv
 import os
-import sys
-from pathlib import Path
 
 # ============================
 # LOAD ENV BEFORE ANY IMPORTS
@@ -17,11 +15,11 @@ load_dotenv(env_path, override=True)
 print("SUPABASE_URL:", os.getenv("SUPABASE_URL"))
 print("SUPABASE_ANON_KEY:", os.getenv("SUPABASE_ANON_KEY"))
 
-# Add current directory to sys.path AFTER loading .env
-sys.path.append(str(Path(__file__).parent))
-
-# NOW we import routes (this will import SupabaseService)
-from routes import trades, ai, chat
+# ============================
+# IMPORT ROUTES AFTER ENV LOAD
+# ============================
+# Import routes after environment is loaded to ensure services can access env vars
+from routes import trades, ai, chat, settings
 
 # ============================
 # FASTAPI APP
@@ -46,6 +44,7 @@ app.add_middleware(
 app.include_router(trades.router)
 app.include_router(ai.router)
 app.include_router(chat.router)
+app.include_router(settings.router)
 
 @app.get("/health")
 async def health_check():

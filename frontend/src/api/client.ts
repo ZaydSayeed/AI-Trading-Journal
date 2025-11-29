@@ -1,19 +1,27 @@
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+import axios from "axios";
 
-export async function api(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { 
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-    ...options,
-  });
+export const api = axios.create({
+  baseURL: "http://127.0.0.1:8000",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `HTTP error! status: ${res.status}`);
+// Request interceptor
+api.interceptors.request.use(
+  (config) => {
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
+);
 
-  return res.json();
-}
-
+// Response interceptor
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const message = error.response?.data?.detail || error.message || "An error occurred";
+    return Promise.reject(new Error(message));
+  }
+);

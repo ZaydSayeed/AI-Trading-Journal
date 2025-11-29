@@ -1,15 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+from typing import Optional
+from uuid import UUID
 
 from services.supabase_service import SupabaseService
 from services.ai_service import AIService
-from typing import Optional
-from uuid import UUID
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -39,4 +34,3 @@ async def chat(request: ChatRequest):
         return ChatResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating chat response: {str(e)}")
-
