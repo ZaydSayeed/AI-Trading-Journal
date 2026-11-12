@@ -8,12 +8,7 @@ import os
 # ============================
 
 env_path = find_dotenv()
-print("Found .env at:", env_path)
-
 load_dotenv(env_path, override=True)
-
-print("SUPABASE_URL:", os.getenv("SUPABASE_URL"))
-print("SUPABASE_ANON_KEY:", os.getenv("SUPABASE_ANON_KEY"))
 
 # ============================
 # IMPORT ROUTES AFTER ENV LOAD
