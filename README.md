@@ -3,6 +3,22 @@
 A full-stack trading journal powered by **FastAPI**, **React**, **Supabase**, and **LLMs (Groq/Llama-3)**.  
 Built to help traders analyze performance, track setups, and receive personalized AI coaching.
 
+**Who it's for:** active retail traders who want one place to log trades, see what's working, and get
+blunt feedback on habits like overtrading or revenge trades. It's self-hosted: you run it against your
+own Supabase project and your own Groq key, and it only holds the trades you enter.
+
+## 🚧 Project Status
+
+Early but working. Logging, editing and reviewing trades works end to end, the AI coach answers with
+your own Groq key, and the frontend builds cleanly. Not done yet:
+
+- Sign-in is a placeholder (it stores an email in the browser), and trades aren't scoped per user yet.
+- The charts exist as components but aren't wired to computed stats.
+- There are no automated tests yet.
+
+Real auth with row-level security, computed analytics and a test suite are next.
+See **[ROADMAP.md](ROADMAP.md)** for the full plan and known bugs.
+
 ---
 
 ## 🚀 Features
@@ -72,5 +88,49 @@ Built to help traders analyze performance, track setups, and receive personalize
 | GET   | `/ai/insights`    | Full journal AI review |
 | POST  | `/chat`           | Chat with the AI coach |
 
+---
 
+## ▶️ Running it locally
+
+**You need:** Python 3.10+, Node.js 18+, a free [Supabase](https://supabase.com) project and a
+[Groq](https://console.groq.com) API key.
+
+**1. Database:** in the Supabase SQL editor, run [`supabase/schema.sql`](supabase/schema.sql).
+
+**2. Backend:**
+
+```bash
+cd backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # then fill in your own values
+uvicorn main:app --reload --port 8000
+```
+
+**3. Frontend:**
+
+```bash
+cd frontend
+npm install
+npm run dev                  # http://localhost:5173
+```
+
+Interactive API docs are at http://localhost:8000/docs once the backend is running.
+Never commit your `.env`; it's already in `.gitignore`.
+
+---
+
+## 🗺️ Roadmap
+
+The full plan is in **[ROADMAP.md](ROADMAP.md)**. The headlines: real accounts with Supabase Auth and
+row-level security, computed analytics behind the charts, tests and CI, CSV import from broker
+exports, and one-command self-hosting with Docker Compose.
+
+## 📄 License
+
+MIT. See [LICENSE](LICENSE).
+
+## ⚠️ Disclaimer
+
+For journaling and self-review only. Nothing here, including the AI coach's output, is financial advice.
 
